@@ -2,7 +2,7 @@
 
 A checkout pricing engine: it picks the best offer for each cart item, applies a cart-level offer on top, and explains every price in plain language.
 
-**Live demo:** _LIVE_URL_
+**Live demo:** https://discount-engine-assignment-wine.vercel.app
 
 Sample files to try are in [`sample-data/`](sample-data): `rules.csv`, `cart.csv`, `cart.pdf`, plus edge cases (`cart-messy.pdf`, `cart-scanned.pdf`, `cart-below-threshold.csv`).
 
