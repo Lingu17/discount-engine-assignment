@@ -14,7 +14,7 @@ cp .env.example .env    # then paste a free Gemini key from https://aistudio.goo
 npm run dev             # open http://localhost:5173
 ```
 
-Tests: `npm test` (26 tests: engine, validation, CSV, text-rule and PDF adapters, server handler).
+Tests: `npm test` (27 tests: engine, validation, CSV, text-rule and PDF adapters, server handler).
 
 ## What was built
 

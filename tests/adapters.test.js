@@ -134,6 +134,16 @@ describe('server handler', () => {
     expect(fetchImpl.mock.calls[0][0]).not.toContain('test-key')
   })
 
+  it('tries the backup model when the main one is busy', async () => {
+    const ok = await gemini({ status: 'ok' })()
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'busy' })
+      .mockResolvedValueOnce(ok)
+    const res = await handleParseRule({ method: 'POST', body: { text: '10% off' }, env, fetchImpl })
+    expect(res.status).toBe(200)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
   it('handles provider errors and unreadable output', async () => {
     const down = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' })
     expect((await handleParseRule({ method: 'POST', body: { text: 'x' }, env, fetchImpl: down })).status).toBe(502)

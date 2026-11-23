@@ -10,6 +10,8 @@
  */
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models'
+const PRIMARY_MODEL = 'gemini-3.8-flash'
+const BACKUP_MODEL = 'gemini-3.5-flash-lite'
 const MAX_TEXT_LENGTH = 300
 
 // Gemini "structured output": the reply must be JSON in this shape.
@@ -25,7 +27,8 @@ const RESPONSE_SCHEMA = {
     stackable: { type: 'BOOLEAN', nullable: true },
     minCartValue: { type: 'NUMBER', nullable: true },
   },
-  required: ['status'],
+  // Every field is required (null when not relevant) so the model can't silently leave one out.
+  required: ['status', 'reason', 'scope', 'appliesTo', 'type', 'value', 'stackable', 'minCartValue'],
 }
 
 const list = (v) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string').slice(0, 50).join(', ') : '') || '(none)'
@@ -34,7 +37,7 @@ function systemPrompt(brands, platforms) {
   return `You convert ONE shop discount, described in plain English, into JSON for a checkout pricing engine.
 
 - scope: "brand" (a brand's products), "platform" (a marketplace such as Amazon India, Flipkart, Noon) or "cart" (depends on total order value).
-- appliesTo: the brand or platform name; null for cart rules. If it matches a known name below, copy that exact spelling.
+- appliesTo: REQUIRED for brand and platform rules — the brand or platform name; null for cart rules. If it refers to a known name below (even partly, e.g. "amazon" = "Amazon India"), copy that exact spelling.
 - type: "percentage" for "X% off"; "flat" for a fixed rupee amount ("Rs.100 off", "₹100 off").
 - value: the number only (20 for 20%, 100 for Rs.100).
 - stackable: true only if the text says it combines/stacks with other offers, else false.
@@ -58,23 +61,30 @@ export async function handleParseRule({ method, body, env = process.env, fetchIm
   if (text.length > MAX_TEXT_LENGTH) return fail(400, `Please keep it under ${MAX_TEXT_LENGTH} characters.`)
   if (!env.GEMINI_API_KEY) return fail(503, 'Plain-English rules are not set up on this server (GEMINI_API_KEY is missing).')
 
-  const model = env.GEMINI_MODEL || 'gemini-2.5-flash'
+  const request = {
+    systemInstruction: { parts: [{ text: systemPrompt(body.brands, body.platforms) }] },
+    contents: [{ role: 'user', parts: [{ text }] }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
+  }
+
   try {
-    const response = await fetchImpl(`${GEMINI_URL}/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
-      signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt(body.brands, body.platforms) }] },
-        contents: [{ role: 'user', parts: [{ text }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
-      }),
-    })
+    // If the main model is overloaded (free tier), try the backup model once.
+    let response
+    for (const model of [env.GEMINI_MODEL || PRIMARY_MODEL, BACKUP_MODEL]) {
+      response = await fetchImpl(`${GEMINI_URL}/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
+        signal: AbortSignal.timeout(12_000),
+        body: JSON.stringify(request),
+      })
+      if (response.ok || ![429, 503].includes(response.status)) break
+      console.error(`Gemini ${model} busy (${response.status}), trying next model`)
+    }
 
     if (!response.ok) {
       console.error(`Gemini ${response.status}:`, (await response.text()).slice(0, 300))
-      return fail(502, response.status === 429
-        ? 'The AI service is busy. Please try again in a minute.'
+      return fail(502, [429, 503].includes(response.status)
+        ? 'The AI service is busy right now. Please try again in a minute.'
         : 'The AI service returned an error. Please try again.')
     }
 
