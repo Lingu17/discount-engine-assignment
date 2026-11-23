@@ -10,7 +10,7 @@ Sample files to try are in [`sample-data/`](sample-data): `rules.csv`, `cart.csv
 
 ```bash
 npm install
-cp .env.example .env    # then paste a free Gemini key from https://aistudio.google.com/apikey (only needed for the text-rule box)
+cp .env.example .env    # then paste a Claude API key from https://console.anthropic.com (only needed for the text-rule box)
 npm run dev             # open http://localhost:5173
 ```
 
@@ -46,7 +46,7 @@ src/adapters/     one file per input type
   csvAdapter.js       CSV → rules / cart
   textRuleAdapter.js  plain English → rule (calls the API, then validates)
   pdfCartAdapter.js   PDF → cart (pdfjs-dist, in the browser)
-server/parseRuleHandler.js   calls Gemini; shared by Vercel and the dev server
+server/parseRuleHandler.js   calls Claude; shared by Vercel and the dev server
 api/parse-rule.js            Vercel serverless function (keeps the API key off the browser)
 ```
 
@@ -65,10 +65,10 @@ api/parse-rule.js            Vercel serverless function (keeps the API key off t
 **Plain-English rules (LLM)**
 - **The LLM only reads text; it never calculates prices.** Prices come from plain code that is tested. CSV and PDF parsing don't use an LLM either — they have a fixed structure, so code is cheaper, faster and always gives the same answer.
 - **The API key stays on the server** (Vercel function). The browser never sees it.
-- **The AI's answer is treated as untrusted.** Gemini is asked for JSON in a fixed schema (temperature 0), and then the app checks it with the same `validateRule()` used for CSV (type, value > 0, percent ≤ 100, cart rule needs a minimum value, …).
+- **The AI's answer is treated as untrusted.** Claude (`claude-opus-5-5`, low effort — it's a short extraction job) must reply in a fixed JSON schema (structured outputs), and then the app checks it with the same `validateRule()` used for CSV (type, value > 0, percent ≤ 100, cart rule needs a minimum value, …).
 - **No invented numbers**: every number in the parsed rule must appear in what the user typed. If the AI "helpfully" guesses 10% for "big orders", the rule is rejected and the user is asked to state the amount.
 - **Unknown brand/platform is a warning, not an error** — a rule for a brand not in this cart is still valid for future carts, but the user is told it won't change any price yet. Matching names are snapped to the cart's spelling ("natura casa" → "Natura Casa").
-- Gemini was chosen for its free tier, so reviewers trying the demo cost nothing. The provider sits behind one small function and is easy to swap.
+- **Why Claude:** I first used Gemini's free tier, but it was often overloaded ("503 high demand") during testing — not acceptable for a checkout tool. Claude answered every test in ~2–3 s. Each request costs well under a US cent. If Claude's safety check ever declines a request, Anthropic's server-side fallback retries it on a backup model; a final refusal is shown as "couldn't process this". The provider sits behind one small function (`server/parseRuleHandler.js`), so swapping it doesn't touch the rest of the app.
 
 **PDF upload**
 - Parsed **in the browser** (no server needed, the file never leaves the user's machine). The PDF library is loaded only when a PDF is uploaded, so the page stays fast.

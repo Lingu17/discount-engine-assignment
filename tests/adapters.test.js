@@ -115,11 +115,13 @@ describe('PDF adapter', () => {
 })
 
 describe('server handler', () => {
-  const env = { GEMINI_API_KEY: 'test-key' }
-  const gemini = (draft) => vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify(draft) }] } }] }),
+  const env = { ANTHROPIC_API_KEY: 'test-key' }
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  const claude = (text, stop_reason = 'end_turn') => json({
+    id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason,
+    content: text === null ? [] : [{ type: 'text', text }], usage: { input_tokens: 1, output_tokens: 1 },
   })
+  const call = (fetchImpl) => handleParseRule({ method: 'POST', body: { text: '10% off' }, env, fetchImpl, maxRetries: 0 })
 
   it('validates input before calling the AI', async () => {
     expect((await handleParseRule({ method: 'GET', env })).status).toBe(405)
@@ -127,27 +129,20 @@ describe('server handler', () => {
     expect((await handleParseRule({ method: 'POST', body: { text: 'x' }, env: {} })).status).toBe(503)
   })
 
-  it('returns the draft and keeps the key in a header, not the URL', async () => {
-    const fetchImpl = gemini({ status: 'ok', value: 10 })
-    const res = await handleParseRule({ method: 'POST', body: { text: '10% off' }, env, fetchImpl })
-    expect(res).toEqual({ status: 200, body: { draft: { status: 'ok', value: 10 } } })
-    expect(fetchImpl.mock.calls[0][0]).not.toContain('test-key')
+  it('returns the draft and sends the key as a header, not in the URL', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(claude('{"status":"ok","value":10}'))
+    expect(await call(fetchImpl)).toEqual({ status: 200, body: { draft: { status: 'ok', value: 10 } } })
+    expect(String(fetchImpl.mock.calls[0][0])).not.toContain('test-key')
   })
 
-  it('tries the backup model when the main one is busy', async () => {
-    const ok = await gemini({ status: 'ok' })()
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 503, text: async () => 'busy' })
-      .mockResolvedValueOnce(ok)
-    const res = await handleParseRule({ method: 'POST', body: { text: '10% off' }, env, fetchImpl })
-    expect(res.status).toBe(200)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+  it('turns a safety refusal into an unresolvable draft', async () => {
+    const res = await call(vi.fn().mockResolvedValue(claude(null, 'refusal')))
+    expect(res.body.draft.status).toBe('unresolvable')
   })
 
   it('handles provider errors and unreadable output', async () => {
-    const down = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'boom' })
-    expect((await handleParseRule({ method: 'POST', body: { text: 'x' }, env, fetchImpl: down })).status).toBe(502)
-    const junk = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'not json' }] } }] }) })
-    expect((await handleParseRule({ method: 'POST', body: { text: 'x' }, env, fetchImpl: junk })).status).toBe(502)
+    const overloaded = vi.fn().mockResolvedValue(json({ type: 'error', error: { type: 'overloaded_error', message: 'busy' } }, 529))
+    expect((await call(overloaded)).body.error).toMatch(/busy/)
+    expect((await call(vi.fn().mockResolvedValue(claude('not json')))).status).toBe(502)
   })
 })
