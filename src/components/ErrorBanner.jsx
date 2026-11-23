@@ -3,10 +3,11 @@
  * Displays a list of parse or validation errors.
  */
 
-export default function ErrorBanner({ errors }) {
+export default function ErrorBanner({ errors, title }) {
   if (!errors || errors.length === 0) return null
   return (
     <div
+      role="alert"
       style={{
         background: '#fce8e8',
         border: '1px solid #e57373',
@@ -17,7 +18,7 @@ export default function ErrorBanner({ errors }) {
       }}
     >
       <div style={{ fontWeight: 700, fontSize: 12, color: '#8a1a1a', marginBottom: 4 }}>
-        {errors.length} issue{errors.length > 1 ? 's' : ''} found
+        {title ?? `${errors.length} issue${errors.length > 1 ? 's' : ''} found`}
       </div>
       {errors.map((e, i) => (
         <div key={i} style={{ fontSize: 12, color: '#5a1010', marginTop: 2 }}>
