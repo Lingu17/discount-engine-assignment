@@ -95,8 +95,7 @@ describe('PDF adapter', () => {
     parseCartFromTextItems(await readPdfTextItems(new Uint8Array(readFileSync(`sample-data/${file}`)), pdfjs))
 
   it('reads the cart PDF from the brief', async () => {
-    const { data, errors, fatal } = await parse('cart.pdf')
-    expect(fatal).toBeNull()
+    const { data, errors } = await parse('cart.pdf')
     expect(errors).toEqual([])
     expect(data).toEqual(cart)
   })
@@ -110,7 +109,9 @@ describe('PDF adapter', () => {
   })
 
   it('explains a scanned PDF with no text', async () => {
-    expect((await parse('cart-scanned.pdf')).fatal).toMatch(/scanned image/)
+    const { data, errors } = await parse('cart-scanned.pdf')
+    expect(data).toEqual([])
+    expect(errors[0]).toMatch(/scanned image/)
   })
 })
 

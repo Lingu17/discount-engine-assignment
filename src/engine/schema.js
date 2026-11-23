@@ -13,8 +13,8 @@
  * Errors are short, plain-English strings that can be shown to a user.
  */
 
-export const SCOPES = ['brand', 'platform', 'cart']
-export const TYPES = ['percentage', 'flat']
+const SCOPES = ['brand', 'platform', 'cart']
+const TYPES = ['percentage', 'flat']
 
 const isBlank = (v) => v === undefined || v === null || String(v).trim() === ''
 
@@ -31,7 +31,7 @@ export function parseMoney(input) {
 }
 
 /** Accepts true/false, yes/no, 1/0 (any case). Returns undefined if unrecognised. */
-export function parseBoolean(input) {
+function parseBoolean(input) {
   if (typeof input === 'boolean') return input
   const s = String(input ?? '').trim().toLowerCase()
   if (['true', 'yes', 'y', '1'].includes(s)) return true

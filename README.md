@@ -27,6 +27,15 @@ Tests: `npm test` (27 tests: engine, validation, CSV, text-rule and PDF adapters
 
 > Note: the brief's *How We'll Evaluate This* section calls the text-rule task "Task 1" and the PDF task "Task 2" (it seems to count from the first new input). In this README they follow the build section's numbering: Task 2 = text rules, Task 3 = PDF.
 
+## Input formats
+
+| Input | Format |
+|---|---|
+| `rules.csv` | `rule_id, scope (brand/platform/cart), applies_to, type (percentage/flat), value, stackable (true/false), min_cart_value` — the last column only for cart rules |
+| `cart.csv` | `item_id, product, brand, platform, base_price` |
+| `cart.pdf` | A text table with columns **Product, Brand, Platform, Base Price** (prices like `Rs.1,299`). Text above the header is ignored. |
+| Plain English | One rule per sentence, with the amount written as a number, e.g. `10% off if cart value is more than Rs.5,000` |
+
 ## How it's structured
 
 The engine never knows where data came from. Each input is an **adapter** that turns raw input into the same two shapes, checked by one shared validator.
@@ -66,14 +75,14 @@ api/parse-rule.js            Vercel serverless function (keeps the API key off t
 - **The LLM only reads text; it never calculates prices.** Prices come from plain code that is tested. CSV and PDF parsing don't use an LLM either — they have a fixed structure, so code is cheaper, faster and always gives the same answer.
 - **The API key stays on the server** (Vercel function). The browser never sees it.
 - **The AI's answer is treated as untrusted.** Claude (`claude-opus-5-5`, low effort — it's a short extraction job) must reply in a fixed JSON schema (structured outputs), and then the app checks it with the same `validateRule()` used for CSV (type, value > 0, percent ≤ 100, cart rule needs a minimum value, …).
-- **No invented numbers**: every number in the parsed rule must appear in what the user typed. If the AI "helpfully" guesses 10% for "big orders", the rule is rejected and the user is asked to state the amount.
+- **No invented numbers**: every number in the parsed rule must appear in what the user typed. If the AI "helpfully" guesses 10% for "big orders", the rule is rejected and the user is asked to state the amount. Trade-off: wording without digits ("half price") is also rejected — the user writes "50%" instead. A wrong discount is worse than one extra sentence.
 - **Unknown brand/platform is a warning, not an error** — a rule for a brand not in this cart is still valid for future carts, but the user is told it won't change any price yet. Matching names are snapped to the cart's spelling ("natura casa" → "Natura Casa").
 - **Why Claude:** I first used Gemini's free tier, but it was often overloaded ("503 high demand") during testing — not acceptable for a checkout tool. Claude answered every test in ~2–3 s. Each request costs well under a US cent. If Claude's safety check ever declines a request, Anthropic's server-side fallback retries it on a backup model; a final refusal is shown as "couldn't process this". The provider sits behind one small function (`server/parseRuleHandler.js`), so swapping it doesn't touch the rest of the app.
 
 **PDF upload**
 - Parsed **in the browser** (no server needed, the file never leaves the user's machine). The PDF library is loaded only when a PDF is uploaded, so the page stays fast.
 - Columns are found from the header row's positions, so it works whether the PDF stores each cell separately or each row as one string (like the brief's example). Text above the header (order number, date), separator lines, "Total" lines and repeated headers on later pages are ignored.
-- **Malformed rows are skipped and listed with the reason** (`Skipped "Wall Shelf … TBD": base price must be a number above 0`). The good rows still load.
+- **Malformed rows are skipped and listed with the reason** (`"Wall Shelf LivSpace Pro Amazon India TBD": base price must be a number above 0`). The good rows still load.
 - **Scanned PDFs** (no text layer) get a clear message asking for a text PDF or CSV. I chose not to add OCR: it is slow, error-prone on prices, and a wrong price at checkout is worse than asking for a better file.
 - **A file with no valid rows never wipes the current cart** (same for rules). One bad upload shouldn't lose the user's session.
 

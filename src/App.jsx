@@ -104,15 +104,22 @@ const S = {
   }),
 }
 
+/** Banner content for an upload: "Cart not updated" if nothing loaded, else "2 rows skipped". */
+function describeIssues(data, errors, what) {
+  if (errors.length === 0) return null
+  const title = data.length === 0 ? `${what} not updated` : `${errors.length} row${errors.length > 1 ? 's' : ''} skipped`
+  return { title, errors }
+}
+
 // ── Component ────────────────────────────────────────────────────
 
 export default function App() {
   const [rules, setRules] = useState([])
-  const [rulesErrors, setRulesErrors] = useState([])
+  const [rulesIssues, setRulesIssues] = useState(null)
   const [rulesFileName, setRulesFileName] = useState('')
 
   const [cartItems, setCartItems] = useState([])
-  const [cartErrors, setCartErrors] = useState([])
+  const [cartIssues, setCartIssues] = useState(null)
   const [cartFileName, setCartFileName] = useState('')
   const [cartBusy, setCartBusy] = useState(false)
 
@@ -123,11 +130,12 @@ export default function App() {
   const canCalculate = rules.length > 0 && cartItems.length > 0
 
   // ── Handlers ──
-  // A file with no valid rows keeps the previous data, so one bad upload never wipes the session.
+  // Every adapter returns { data, errors }. A file with no valid rows keeps the
+  // previous data, so one bad upload never wipes the session.
 
   async function handleRulesFile(file) {
     const { data, errors } = parseRulesCSV(await file.text())
-    setRulesErrors(errors)
+    setRulesIssues(describeIssues(data, errors, 'Rules'))
     if (data.length === 0) return
     setRules(data)
     setRulesFileName(file.name)
@@ -136,9 +144,9 @@ export default function App() {
   async function handleCartFile(file) {
     const isPdf = file.name.toLowerCase().endsWith('.pdf')
     setCartBusy(true)
-    const { data, errors, fatal } = isPdf ? await parsePdfCart(await file.arrayBuffer()) : parseCartCSV(await file.text())
+    const { data, errors } = isPdf ? await parsePdfCart(await file.arrayBuffer()) : parseCartCSV(await file.text())
     setCartBusy(false)
-    setCartErrors(fatal ? [fatal, ...errors] : errors)
+    setCartIssues(describeIssues(data, errors, 'Cart'))
     if (data.length === 0) return
     setCartItems(data)
     setCartFileName(file.name)
@@ -160,48 +168,43 @@ export default function App() {
       </div>
 
       <div style={S.main}>
-        <div>
-          <div style={S.section}>
-            <div style={S.sectionTitle}>Discount Rules</div>
-            <FileUploader
-              label="rules.csv"
-              description="Upload your discount rules CSV"
-              accept=".csv"
-              onFile={handleRulesFile}
-              hasData={rules.length > 0}
-              fileName={rulesFileName || 'Rules added by text'}
-            />
-            <ErrorBanner errors={rulesErrors} />
-            {rules.length > 0 && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <div style={S.hint}>{rules.length} rule{rules.length > 1 ? 's' : ''} active</div>
-                <DataTable columns={RULES_COLUMNS} rows={rules} />
-              </div>
-            )}
-          </div>
+        <div style={S.section}>
+          <div style={S.sectionTitle}>Discount Rules</div>
+          <FileUploader
+            label="rules.csv"
+            description="Upload your discount rules CSV"
+            accept=".csv"
+            onFile={handleRulesFile}
+            hasData={rules.length > 0}
+            fileName={rulesFileName || 'Rules added by text'}
+          />
+          <ErrorBanner {...rulesIssues} />
+          {rules.length > 0 && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <div style={S.hint}>{rules.length} rule{rules.length > 1 ? 's' : ''} active</div>
+              <DataTable columns={RULES_COLUMNS} rows={rules} />
+            </div>
+          )}
+        </div>
 
-          <div style={S.section}>
-            <div style={S.sectionTitle}>Cart Items</div>
-            <FileUploader
-              label="cart.csv or cart.pdf"
-              description="Upload your cart as a CSV or PDF"
-              accept=".csv,.pdf"
-              onFile={handleCartFile}
-              hasData={cartItems.length > 0}
-              fileName={cartFileName}
-              busy={cartBusy}
-            />
-            <ErrorBanner
-              title={cartErrors.length === 1 ? 'Problem with this file' : `${cartErrors.length} rows need attention`}
-              errors={cartErrors}
-            />
-            {cartItems.length > 0 && (
-              <div style={{ marginTop: '0.75rem' }}>
-                <div style={S.hint}>{cartItems.length} item{cartItems.length > 1 ? 's' : ''} in cart</div>
-                <DataTable columns={CART_COLUMNS} rows={cartItems} />
-              </div>
-            )}
-          </div>
+        <div style={S.section}>
+          <div style={S.sectionTitle}>Cart Items</div>
+          <FileUploader
+            label="cart.csv or cart.pdf"
+            description="Upload your cart as a CSV or PDF"
+            accept=".csv,.pdf"
+            onFile={handleCartFile}
+            hasData={cartItems.length > 0}
+            fileName={cartFileName}
+            busy={cartBusy}
+          />
+          <ErrorBanner {...cartIssues} />
+          {cartItems.length > 0 && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <div style={S.hint}>{cartItems.length} item{cartItems.length > 1 ? 's' : ''} in cart</div>
+              <DataTable columns={CART_COLUMNS} rows={cartItems} />
+            </div>
+          )}
         </div>
 
         <div style={S.section}>

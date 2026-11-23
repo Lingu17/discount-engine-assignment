@@ -18,7 +18,7 @@ export default function ErrorBanner({ errors, title }) {
       }}
     >
       <div style={{ fontWeight: 700, fontSize: 12, color: '#8a1a1a', marginBottom: 4 }}>
-        {title ?? `${errors.length} issue${errors.length > 1 ? 's' : ''} found`}
+        {title}
       </div>
       {errors.map((e, i) => (
         <div key={i} style={{ fontSize: 12, color: '#5a1010', marginTop: 2 }}>

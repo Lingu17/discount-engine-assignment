@@ -58,16 +58,18 @@ const isHeader = (line) => HEADERS.every((h) => lineText(line).toLowerCase().inc
 const isDecoration = (line) => /^[\s─━—\-=_|]+$/.test(lineText(line))
 const isTotal = (line) => /^(sub)?total\b/i.test(lineText(line).trim())
 
-/** Pure: text pieces -> { data: CartItem[], errors: string[], fatal: string|null } */
+const fail = (message) => ({ data: [], errors: [message] })
+
+/** Pure: text pieces -> { data: CartItem[], errors: string[] } (same shape as the CSV adapter) */
 export function parseCartFromTextItems(rawItems) {
   if (rawItems.length === 0) {
-    return { data: [], errors: [], fatal: 'This PDF has no readable text — it may be a scanned image. Please upload a text-based PDF or a CSV.' }
+    return fail('This PDF has no readable text — it may be a scanned image. Please upload a text-based PDF or a CSV.')
   }
 
   const lines = toLines(splitWideItems(rawItems))
   const header = lines.find(isHeader)
   if (!header) {
-    return { data: [], errors: [], fatal: 'Could not find a table with the columns Product, Brand, Platform, Base Price.' }
+    return fail('Could not find a table with the columns Product, Brand, Platform, Base Price.')
   }
 
   // Column start positions come from the header words, left to right.
@@ -94,14 +96,14 @@ export function parseCartFromTextItems(rawItems) {
       basePrice: cols[3],
     })
     if (result.ok) data.push(result.value)
-    else errors.push(`Skipped "${lineText(line)}": ${result.errors.join('; ')}`)
+    else errors.push(`"${lineText(line)}": ${result.errors.join('; ')}`)
   }
 
-  const fatal = data.length === 0 ? 'No valid cart items found in the PDF, so the current cart was kept.' : null
-  return { data, errors, fatal }
+  if (data.length === 0 && errors.length === 0) return fail('The table has no item rows.')
+  return { data, errors }
 }
 
-/** Browser entry point: ArrayBuffer of a PDF -> { data, errors, fatal }. Never throws. */
+/** Browser entry point: ArrayBuffer of a PDF -> { data, errors }. Never throws. */
 export async function parsePdfCart(arrayBuffer) {
   try {
     const pdfjs = await import('pdfjs-dist') // loaded only when a PDF is uploaded
@@ -109,6 +111,6 @@ export async function parsePdfCart(arrayBuffer) {
     return parseCartFromTextItems(await readPdfTextItems(arrayBuffer, pdfjs))
   } catch (err) {
     console.error('PDF read failed:', err)
-    return { data: [], errors: [], fatal: 'Could not open this PDF. It may be damaged or password-protected.' }
+    return fail('Could not open this PDF. It may be damaged or password-protected.')
   }
 }
