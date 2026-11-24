@@ -4,6 +4,8 @@ A checkout pricing engine: it picks the best offer for each cart item, applies a
 
 **Live demo:** https://discount-engine-assignment-wine.vercel.app
 
+**Video walkthrough:** https://www.loom.com/share/41d941d4de044839a4dffa4601ab0592
+
 Sample files to try are in [`sample-data/`](sample-data): `rules.csv`, `cart.csv`, `cart.pdf`, plus edge cases (`cart-messy.pdf`, `cart-scanned.pdf`, `cart-below-threshold.csv`).
 
 ## Run locally (3 steps)
